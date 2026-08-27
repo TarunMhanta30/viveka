@@ -27,3 +27,16 @@
   Fix: clamp with min(23, ...).
   Lesson: any derived time field needs its range checked at both ends, not
   just the lower one.
+
+  - Benign traffic breached its own reserve limit in 14.5% of mandate-months,
+  which would fire hard rule H3 (Critical -> block) on legitimate users and
+  destroy the false-positive baseline.
+  Cause: reserve sized against the MEDIAN transaction amount. Actual mean
+  monthly spend is ~1.28x higher, because a log-normal's mean exceeds its
+  median by exp(sigma^2/2), and the 3% amount-outlier injection multiplies
+  those amounts by 3-8x.
+  Fix: size the reserve against expected (mean) spend including the outlier
+  contribution, and raise headroom from 1.4-2.5x to 2.0-3.2x.
+  Lesson: size a limit against the expected value of a distribution, not a
+  typical value. Also: this was only caught because the generator prints
+  measured diagnostics rather than assuming the parameters are right.
