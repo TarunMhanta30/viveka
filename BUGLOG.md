@@ -40,3 +40,30 @@
   Lesson: size a limit against the expected value of a distribution, not a
   typical value. Also: this was only caught because the generator prints
   measured diagnostics rather than assuming the parameters are right.
+
+
+- Route B (delegation abuse) concentrated in only 16 principals out of 500,
+  because each injection creates a burst of 6-10 events from one principal.
+  Section 9.10 splits by principal, so the held-out set would carry only
+  ~3 Route B principals — making recall on my most important attack class
+  statistically meaningless.
+  Fix: reduced burst size to 4-7 and raised Route B's share of the attack
+  budget from 40% to 50%, roughly doubling the number of distinct
+  principals carrying it.
+  Lesson: with a principal-level split, what matters is not the number of
+  attack EVENTS but the number of distinct PRINCIPALS carrying each attack
+  class. Event counts alone hid this.
+
+  - Section 9.7 specified 500 principals / ~35k events. Raised to 1200
+  principals after measuring that Route B reached only 7 held-out
+  principals — too few for a meaningful recall estimate on the most
+  important attack class. Burst size reduced 4-7 to 3-6 to spread the
+  same event budget across more principals.
+  Lesson: with a principal-level split, statistical power is set by
+  distinct principals per class per split, not by total event count.
+
+  - Side effect of the burst-size reduction: H3 now fires on 5.5% of Route B
+  events, up from 0.7%. Smaller bursts divide the same drain budget across
+  fewer transactions, so each is larger and more likely to cross the reserve.
+  Accepted: 94.5% of Route B remains invisible to hard rules, which is the
+  property the ML layer depends on. Recorded rather than silently tuned away.
