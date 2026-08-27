@@ -85,7 +85,7 @@ def make_principals(rng: random.Random) -> list[Principal]:
             spend_profile=rng.choice(list(SpendProfile)),
             rhythm_profile=rng.choice(list(RhythmProfile)),
             active_hour_start=start_hour,
-            active_hour_end=start_hour + rng.randint(8, 13),
+            active_hour_end=min(23, start_hour + rng.randint(8, 13)),
         ))
     return principals
 
@@ -111,8 +111,14 @@ def make_agents_and_mandates(
         registered = SIM_START + timedelta(days=rng.randint(0, 20))
         created = registered + timedelta(hours=rng.randint(1, 48))
 
+        # Reserve must cover a MONTH of normal spending, with headroom.
+        # Sizing it against a single transaction would make benign users
+        # breach their own limit and fire hard rule H3 constantly.
         median_spend, _ = SPEND_PARAMS[p.spend_profile]
-        reserve = int(median_spend * rng.uniform(8, 20))
+        mean_gap_days = RHYTHM_DAYS[p.rhythm_profile]
+        expected_monthly_txns = 30.0 / mean_gap_days
+        expected_monthly_spend = median_spend * expected_monthly_txns
+        reserve = int(expected_monthly_spend * rng.uniform(1.4, 2.5))
 
         agents.append(Agent(
             agent_id=f"A{idx:04d}",
@@ -120,7 +126,9 @@ def make_agents_and_mandates(
             agent_type=agent_type,
             registered_at=registered,
         ))
-
+        # TODO (Pass 3): a fraction of mandates need short expiries and
+        # REVOKED status, otherwise hard rules H1/H2 never fire and the
+        # dataset only exercises H3/H4. See Section 11.2.1.
         mandates.append(Mandate(
             mandate_id=f"M{idx:04d}",
             principal_id=p.principal_id,

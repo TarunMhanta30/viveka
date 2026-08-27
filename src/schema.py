@@ -7,7 +7,7 @@ See Section 9 for the design reasoning behind each field.
 Money is ALWAYS stored as integer paise, never float rupees.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Optional
