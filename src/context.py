@@ -4,7 +4,7 @@ VIVEKA — context loading and baseline computation.
 Answers three questions for any event:
   1. What does this principal's history look like BEFORE this moment?
   2. What mandate governs this transaction?
-  3. What merchant is this?
+  3. What merchant and agent are involved?
 
 LEAKAGE RULE L5 (Section 9.9) is enforced HERE and nowhere else.
 Every history slice is strictly before the event timestamp. If each
@@ -133,6 +133,14 @@ class MerchantRow:
 
 
 @dataclass
+class AgentRow:
+    agent_id: str
+    principal_id: str
+    agent_type: str
+    registered_at: datetime
+
+
+@dataclass
 class PrincipalRow:
     principal_id: str
     created_at: datetime
@@ -149,9 +157,10 @@ class PrincipalRow:
 class Context:
     """Holds the world and answers point-in-time questions about it."""
 
-    def __init__(self, events, principals, mandates, merchants, splits):
+    def __init__(self, events, principals, agents, mandates, merchants, splits):
         self.events = events
         self.principals = {p.principal_id: p for p in principals}
+        self.agents = {a.agent_id: a for a in agents}
         self.mandates = {m.mandate_id: m for m in mandates}
         self.mandate_by_principal = {m.principal_id: m for m in mandates}
         self.merchants = {m.merchant_id: m for m in merchants}
@@ -233,10 +242,20 @@ class Context:
                     active_hour_end=int(r["active_hour_end"]),
                 ))
 
+        agents = []
+        with open(data_dir / "agents.csv") as f:
+            for r in csv.DictReader(f):
+                agents.append(AgentRow(
+                    agent_id=r["agent_id"],
+                    principal_id=r["principal_id"],
+                    agent_type=r["agent_type"],
+                    registered_at=dt(r["registered_at"]),
+                ))
+
         with open(data_dir / "splits.json") as f:
             splits = json.load(f)
 
-        return cls(events, principals, mandates, merchants, splits)
+        return cls(events, principals, agents, mandates, merchants, splits)
 
     # ---------- point-in-time lookups ----------
 
@@ -289,7 +308,6 @@ class Context:
         logs = np.log(amounts)
         span_days = max((ts - prior[0].timestamp).total_seconds() / 86400, 1e-6)
 
-        # gaps between consecutive transactions
         gaps = [
             (prior[i].timestamp - prior[i - 1].timestamp).total_seconds() / 86400
             for i in range(1, n)
@@ -335,6 +353,7 @@ def main():
     ctx = Context.load()
     print(f"events    : {len(ctx.events):,}")
     print(f"principals: {len(ctx.principals):,}")
+    print(f"agents    : {len(ctx.agents):,}")
     print(f"mandates  : {len(ctx.mandates):,}")
     print(f"merchants : {len(ctx.merchants):,}")
 
@@ -368,8 +387,12 @@ def main():
     print(f"  ext content rate: {bl.ext_content_rate:.2f}")
     print(f"  distinct merch  : {len(bl.merchant_counts)}")
 
+    # --- agent lookup sanity ---
+    ag = ctx.agents[late.agent_id]
+    print(f"\nagent {ag.agent_id} type: {ag.agent_type}")
+
     # --- circular hour sanity ---
-    print(f"\ncircular distance 23h to 1h : "
+    print(f"circular distance 23h to 1h : "
           f"{circular_hour_distance(23, 1):.0f}  (want 2)")
 
 
