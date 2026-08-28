@@ -96,3 +96,10 @@
   Lesson: gradient boosting would have tolerated the extreme values silently.
   Logistic regression would not — one exploded row can dominate the fit.
   Distribution checks catch what model accuracy hides.
+
+  - Route B median for velocity_ratio_1h sits at the clip ceiling of 100.
+  The clip is therefore compressing genuine signal, not only trimming
+  numerical blow-ups. Accepted: the feature still separates cleanly
+  (benign median 0.00), and the alternative -- unbounded ratios reaching
+  678 -- would destabilise logistic regression. Recorded so the clip is a
+  stated design choice rather than a hidden one.
