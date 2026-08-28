@@ -67,6 +67,23 @@ BENIGN_INSTRUCTION_MIX = [
     (InstructionSource.EXTERNAL_CONTENT, 0.10),
 ]
 
+# Attacks must NOT map deterministically to one instruction_source, or
+# that field becomes a label proxy (trap L3). Real injection arrives
+# through more than one path.
+A_INSTRUCTION_MIX = [
+    (InstructionSource.EXTERNAL_CONTENT, 0.65),
+    (InstructionSource.AGENT_AUTONOMOUS, 0.20),
+    (InstructionSource.SCHEDULED,        0.15),
+]
+
+B_INSTRUCTION_MIX = [
+    (InstructionSource.AGENT_AUTONOMOUS, 0.50),
+    (InstructionSource.SCHEDULED,        0.35),
+    (InstructionSource.USER_DIRECT,      0.15),
+]
+
+P_B_OFF_HOURS = 0.65   # not every drain happens at 3am
+
 # --- Mandate lifecycle: makes H1/H2 reachable (Section 11.2.1) ---
 P_MANDATE_EXPIRES = 0.04
 P_MANDATE_REVOKED = 0.03
@@ -366,7 +383,7 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
         ts = (lo + timedelta(seconds=rng.uniform(0, span))).replace(microsecond=0)
 
         ev = _make_event(ts, p, mandate, merchant, amount,
-                         InstructionSource.EXTERNAL_CONTENT, rng)
+                         _pick_weighted(A_INSTRUCTION_MIX, rng), rng)
         events.append(ev)
         labels.append(Label(ev.event_id, True, AttackRoute.A_INJECTION,
                             "subtle" if subtle else "blatant"))
@@ -391,7 +408,12 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
 
         span = (hi - lo).total_seconds()
         start = lo + timedelta(seconds=rng.uniform(0, max(span - 7200, 1)))
-        start = start.replace(hour=rng.choice([1, 2, 3, 4, 23]),
+
+        if rng.random() < P_B_OFF_HOURS:
+            b_hour = rng.choice([1, 2, 3, 4, 23])
+        else:
+            b_hour = rng.randint(p.active_hour_start, p.active_hour_end)
+        start = start.replace(hour=b_hour,
                               minute=rng.randint(0, 59), microsecond=0)
 
         for _ in range(burst):
@@ -399,7 +421,7 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
             amount = int(per_txn * rng.uniform(0.75, 1.25))
             ts = start + timedelta(minutes=rng.randint(0, 55))
             ev = _make_event(ts, p, mandate, merchant, amount,
-                             InstructionSource.AGENT_AUTONOMOUS, rng)
+                             _pick_weighted(B_INSTRUCTION_MIX, rng), rng)
             events.append(ev)
             labels.append(Label(ev.event_id, True,
                                 AttackRoute.B_DELEGATION_ABUSE, "burst_drain"))
@@ -507,7 +529,6 @@ def main():
     label_by_id = {l.event_id: l for l in all_labels}
     reserve_by_mandate = {m.mandate_id: m.reserve_limit_paise for m in mandates}
 
-    # Per split, per route
     counts = {}
     principals_seen = {}
     for e in attacks:
@@ -516,12 +537,10 @@ def main():
         counts[(s, r)] = counts.get((s, r), 0) + 1
         principals_seen.setdefault((s, r), set()).add(e.principal_id)
 
-    # L1 check
     benign_merchants = {e.merchant_id for e in benign}
     attack_merchants = {e.merchant_id for e in attacks}
     overlap = len(attack_merchants & benign_merchants) / len(attack_merchants)
 
-    # Does Route B trip H3? Walk cumulative spend per mandate-month.
     consumed = {}
     tripped_b = tripped_total = b_total = 0
     for e in all_events:

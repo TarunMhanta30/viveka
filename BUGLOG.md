@@ -67,3 +67,16 @@
   fewer transactions, so each is larger and more likely to cross the reserve.
   Accepted: 94.5% of Route B remains invisible to hard rules, which is the
   property the ML layer depends on. Recorded rather than silently tuned away.
+
+  - Data inspection revealed instruction_source was a partial label proxy:
+  agent_autonomous appeared in 53% of attacks vs 15% of benign, because
+  Route A always used external_content and Route B always agent_autonomous.
+  Same issue with hour (attack mean 8.6 vs benign 13.7) since Route B always
+  drew from [1,2,3,4,23].
+  Section 9's rule L3 required benign rows to use these values too, which
+  they did — but I missed the mirror requirement that attacks must not use
+  them exclusively.
+  Fix: attacks now draw instruction_source from route-specific weighted
+  mixes, and Route B uses off-hours only 65% of the time.
+  Lesson: leakage prevention runs both ways. It is not enough for the benign
+  class to look varied; the attack class must too.
