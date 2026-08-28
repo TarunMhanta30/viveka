@@ -80,3 +80,19 @@
   mixes, and Route B uses off-hours only 65% of the time.
   Lesson: leakage prevention runs both ways. It is not enough for the benign
   class to look varied; the attack class must too.
+
+
+  - Three numerical bugs found by printing per-feature distributions rather
+  than assuming the features were sane:
+  1. interarrival_zscore reached 34,717 — a principal with near-simultaneous
+     prior events has sd_gap ~ 0, so the division exploded. Fixed with a
+     denominator floor and a clip to +/-20.
+  2. velocity_ratio_1h reached 678 for the same reason on hourly_rate.
+     Clipped to 100.
+  3. utilisation_velocity median is 0.43, not the ~1.0 claimed in Section
+     10.4. Cause: reserves carry 2-3x headroom by design (Section 9 fix), so
+     full-month utilisation is ~0.4. Section 10 wording corrected; the
+     feature is sound but the stated interpretation was wrong.
+  Lesson: gradient boosting would have tolerated the extreme values silently.
+  Logistic regression would not — one exploded row can dominate the fit.
+  Distribution checks catch what model accuracy hides.
