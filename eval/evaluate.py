@@ -12,12 +12,15 @@ BASE RATE WARNING
   NOT mean the model improved. Metrics are reported twice -- with and
   without Route C -- so the comparison to validation is honest.
 
-ROUTE C IS THE GENERALISATION TEST
-  No feature targets it (Section 10.6.1) and it never appeared in
-  training. Whatever it catches transfers incidentally from Route A's
-  features. Its known signature -- underpricing, amount_log_zscore
-  around -1.9 -- has no feature at all, so a low number here is the
-  expected and honest result.
+RULE-CAUGHT vs MODEL-CAUGHT
+  Per-route recall on the full decision path MIXES two layers. Routes A
+  and C always use an out-of-scope merchant, so hard rule H4 fires on
+  every one of them and they show 100% recall regardless of what the
+  model thought. That is policy doing policy's work, not evidence the
+  model generalises.
+  Section 4 below isolates the MODEL by scoring with rules switched off.
+  Route B is the only route that is policy-compliant by design, so it is
+  the only route where the headline recall already reflects the model.
 
 EVASION TEST (Section 14.4)
   Measures recall against an attacker who knows the thresholds and
@@ -80,6 +83,7 @@ def decision_metrics(y, actions, routes, variants):
     recall = tp / (tp + fn) if (tp + fn) else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
 
+    n_benign = max(int((y == 0).sum()), 1)
     print(f"\n  decision path (flagged = step_up or block)")
     print(f"    precision  : {precision:.4f}   of what I flagged, "
           f"how much was real")
@@ -88,11 +92,13 @@ def decision_metrics(y, actions, routes, variants):
     print(f"    confusion  : TP {tp}  FP {fp}  FN {fn}  TN {tn:,}")
     print(f"    benign stepped up : "
           f"{int((flagged & ~blocked & (y == 0)).sum()):,} "
-          f"({(flagged & ~blocked & (y == 0)).sum() / max((y == 0).sum(),1):.2%})")
+          f"({(flagged & ~blocked & (y == 0)).sum() / n_benign:.2%})")
     print(f"    benign blocked    : {int((blocked & (y == 0)).sum()):,} "
-          f"({(blocked & (y == 0)).sum() / max((y == 0).sum(),1):.2%})")
+          f"({(blocked & (y == 0)).sum() / n_benign:.2%})")
+    print(f"    NOTE: {int((flagged & ~blocked & (y == 0)).sum())} of "
+          f"{fp} false positives are QUESTIONS (step-up), not declines.")
 
-    print(f"\n  recall by route:")
+    print(f"\n  recall by route (FULL decision path -- rules + model):")
     per_route = {}
     for r in ["A", "B", "C"]:
         m = routes == r
@@ -100,8 +106,9 @@ def decision_metrics(y, actions, routes, variants):
             continue
         rec = flagged[m].mean()
         per_route[r] = float(rec)
+        note = "  <- H4 fires on all of these" if r in ("A", "C") else ""
         print(f"    route {r} : {int(flagged[m].sum()):4d}/{int(m.sum()):4d} "
-              f"= {rec:.1%}")
+              f"= {rec:.1%}{note}")
 
     print(f"\n  recall by variant:")
     per_variant = {}
@@ -119,11 +126,46 @@ def decision_metrics(y, actions, routes, variants):
             "recall_by_route": per_route, "recall_by_variant": per_variant}
 
 
+def model_only_metrics(y, probs, routes, variants, t_step):
+    """Recall from the MODEL SCORE ALONE, with hard rules switched off.
+
+    This is the honest generalisation measurement. On the full decision
+    path, Routes A and C show 100% because H4 catches every out-of-scope
+    merchant -- which says nothing about the model. Here a transaction
+    is flagged only if the model scored it above the step-up threshold.
+
+    No tuning happens: these are the same frozen predictions, re-reported
+    with the rule layer removed.
+    """
+    flagged = probs >= t_step
+    print(f"\n  recall from MODEL SCORE ONLY (score >= {t_step:.2f}, "
+          f"rules ignored):")
+    out = {}
+    for r in ["A", "B", "C"]:
+        m = routes == r
+        if m.sum() == 0:
+            continue
+        rec = flagged[m].mean()
+        out[r] = float(rec)
+        print(f"    route {r} : {int(flagged[m].sum()):4d}/{int(m.sum()):4d} "
+              f"= {rec:.1%}")
+    print(f"    benign  : {int(flagged[y == 0].sum()):4d}/"
+          f"{int((y == 0).sum()):4d} = {flagged[y == 0].mean():.1%} "
+          f"(model-only false positive rate)")
+
+    for v in sorted(set(variants) - {"none"}):
+        m = variants == v
+        if m.sum() == 0:
+            continue
+        out[f"variant_{v}"] = float(flagged[m].mean())
+    return out
+
+
 # ---------------------------------------------------------------
 # evasion (Section 14.4)
 # ---------------------------------------------------------------
 
-def evasion_test(df_hold, model, thresholds, rule_results, probs):
+def evasion_test(df_hold, model, thresholds, probs):
     """Recall against an attacker who knows the thresholds.
 
     Method: take Route B burst_drain events and shift the features an
@@ -143,10 +185,9 @@ def evasion_test(df_hold, model, thresholds, rule_results, probs):
     if mask.sum() == 0:
         return None
 
-    X = df_hold[FEATURE_NAMES].values.copy()
-    idx = [FEATURE_NAMES.index(c) for c in controllable]
-    X_ev = X.copy()
-    for i in idx:
+    X_ev = df_hold[FEATURE_NAMES].values.copy()
+    for c in controllable:
+        i = FEATURE_NAMES.index(c)
         col = X_ev[mask, i]
         X_ev[mask, i] = np.where(np.isnan(col), col, col * 0.75)
 
@@ -210,18 +251,18 @@ def main():
 
     results = {"model": bundle["chosen"], "thresholds": thresholds}
 
-    # ---- with Route C ----
+    # ---- 1. with Route C ----
     print("\n" + "-" * 66)
-    print("WITH Route C (the real holdout, base rate inflated by design)")
+    print("1. WITH Route C (the real holdout, base rate inflated by design)")
     print("-" * 66)
     results["with_route_c"] = score_metrics(y, probs, "model metrics")
     results["with_route_c"].update(
         decision_metrics(y, actions, routes, variants))
 
-    # ---- without Route C: comparable to validation ----
+    # ---- 2. without Route C: comparable to validation ----
     keep = routes != "C"
     print("\n" + "-" * 66)
-    print("WITHOUT Route C (comparable to validation's base rate)")
+    print("2. WITHOUT Route C (comparable to validation's base rate)")
     print("-" * 66)
     results["without_route_c"] = score_metrics(
         y[keep], probs[keep], "model metrics")
@@ -229,11 +270,11 @@ def main():
         decision_metrics(y[keep], np.asarray(actions)[keep],
                          routes[keep], variants[keep]))
 
-    # ---- validation comparison ----
+    # ---- 3. validation comparison ----
     with open("models/metrics_val.json") as f:
         val = json.load(f)
     print("\n" + "-" * 66)
-    print("VALIDATION vs HOLDOUT (like for like)")
+    print("3. VALIDATION vs HOLDOUT (like for like)")
     print("-" * 66)
     print(f"  validation PR-AUC        : {val['pr_auc_gb']:.4f}")
     print(f"  holdout PR-AUC (no C)    : "
@@ -249,24 +290,27 @@ def main():
     else:
         print("  -> holdout better. Likely split variance, not improvement.")
 
-    # ---- Route C: the generalisation test ----
-    cmask = routes == "C"
-    if cmask.sum():
-        c_flag = np.asarray(actions)[cmask] != Action.ALLOW
-        print("\n" + "-" * 66)
-        print("ROUTE C -- generalisation test (no features built for it)")
-        print("-" * 66)
-        print(f"  events   : {int(cmask.sum())}")
-        print(f"  recall   : {c_flag.mean():.1%}")
-        print(f"  mechanism: transfers from Route A features "
-              f"(out-of-scope merchant, new to principal)")
-        print(f"  NOT caught: underpricing. Its signature is "
-              f"amount_log_zscore ~ -1.9, and no feature treats a LOW "
-              f"amount as suspicious.")
+    # ---- 4. model-only recall: the real generalisation test ----
+    print("\n" + "-" * 66)
+    print("4. MODEL-ONLY RECALL -- what the MODEL did, rules removed")
+    print("-" * 66)
+    print("  Routes A and C show 100% on the full path because H4 fires on")
+    print("  every out-of-scope merchant. That is the rule layer, not the")
+    print("  model. These numbers isolate the model.")
+    results["model_only"] = model_only_metrics(
+        y, probs, routes, variants, thresholds["t_step"])
 
-    # ---- evasion ----
-    results["evasion"] = evasion_test(hold, model, thresholds,
-                                      rule_results, probs)
+    c_model = results["model_only"].get("C")
+    if c_model is not None:
+        print(f"\n  ROUTE C GENERALISATION: {c_model:.1%}")
+        print(f"  No feature targets Route C and it never appeared in")
+        print(f"  training, so this is pure transfer from Route A features.")
+        print(f"  What is NOT caught: underpricing. Route C's signature is")
+        print(f"  amount_log_zscore ~ -1.9, and no feature treats a LOW")
+        print(f"  amount as suspicious. That gap is by design and reported.")
+
+    # ---- 5. evasion ----
+    results["evasion"] = evasion_test(hold, model, thresholds, probs)
 
     OUT.parent.mkdir(exist_ok=True)
     with open(OUT, "w") as f:

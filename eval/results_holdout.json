@@ -59,6 +59,16 @@
       "subtle": 1.0
     }
   },
+  "model_only": {
+    "A": 0.5081967213114754,
+    "B": 0.7317073170731707,
+    "C": 0.3836477987421384,
+    "variant_blatant": 0.5517241379310345,
+    "variant_burst_drain": 0.7564102564102564,
+    "variant_stale_credential": 0.25,
+    "variant_subtle": 0.46875,
+    "variant_underpriced": 0.3836477987421384
+  },
   "evasion": {
     "n": 78,
     "naive_recall": 0.7564102564102564,

@@ -217,3 +217,14 @@
   Lesson: a per-route recall table that mixes rule and model decisions
   cannot tell you what the model did. The measurement has to isolate the
   layer being evaluated.
+
+  - Isolating model-only recall changed the interpretation of every route.
+  Full path: A 100%, B 75.6%, C 100%. Model only: A 50.8%, B 73.2%, C 38.4%.
+  Routes A and C were being caught by hard rule H4, not by the model.
+  Route C generalisation is therefore 38.4%, not 100% -- an attack class with
+  no features and no training exposure, caught by transfer from the shared
+  out-of-scope property.
+  Also revealed: model-only benign false positive rate is 0.7%, versus 5.6%
+  step-up on the full path. Most false positives come from H4 firing on
+  legitimate new-merchant purchases, not from the model.
+  Lesson: aggregate metrics on a layered system hide which layer is working.
