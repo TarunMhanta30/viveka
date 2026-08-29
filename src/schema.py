@@ -114,6 +114,7 @@ class Mandate:
     last_confirmed_at: datetime
     expires_at: datetime
     status: MandateStatus = MandateStatus.ACTIVE
+    revoked_at: Optional[datetime] = None   # when revocation took effect
 
 
 @dataclass

@@ -121,6 +121,7 @@ class MandateRow:
     last_confirmed_at: datetime
     expires_at: datetime
     status: str
+    revoked_at: datetime | None = None
 
 
 @dataclass
@@ -217,6 +218,7 @@ class Context:
                     last_confirmed_at=dt(r["last_confirmed_at"]),
                     expires_at=dt(r["expires_at"]),
                     status=r["status"],
+                    revoked_at=dt(r["revoked_at"]) if r.get("revoked_at") else None,
                 ))
 
         merchants = []
@@ -356,6 +358,9 @@ def main():
     print(f"agents    : {len(ctx.agents):,}")
     print(f"mandates  : {len(ctx.mandates):,}")
     print(f"merchants : {len(ctx.merchants):,}")
+
+    n_revoked = sum(1 for m in ctx.mandates.values() if m.revoked_at is not None)
+    print(f"revoked   : {n_revoked}  (with a revocation timestamp)")
 
     # --- L5 check: no history entry may be at or after the event ---
     violations = 0

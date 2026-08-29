@@ -94,6 +94,7 @@ ROUTE_SPLIT  = {AttackRoute.A_INJECTION: 0.30,
                 AttackRoute.B_DELEGATION_ABUSE: 0.50,
                 AttackRoute.C_COUNTERFEIT_MERCHANT: 0.20}
 B_BURST_SIZE = (3, 6)
+P_STALE_VARIANT = 0.12   # share of Route B budget spent on stale credentials
 
 # --- Splits (Section 9.10) ---
 SPLIT_RATIOS = {"train": 0.60, "val": 0.20, "holdout": 0.20}
@@ -168,6 +169,10 @@ def make_agents_and_mandates(principals, merchants, rng):
 
     A small fraction of mandates expire or are revoked inside the window,
     so hard rules H1 (revoked) and H2 (expired) are reachable.
+
+    revoked_at records WHEN revocation took effect. Status alone is not
+    enough: without a timestamp, H1 would flag every transaction on that
+    mandate including ones that were valid when they happened (BUGLOG).
     """
     agents, mandates = [], []
     mandate_end = {}
@@ -200,6 +205,7 @@ def make_agents_and_mandates(principals, merchants, rng):
 
         status = MandateStatus.ACTIVE
         expires = created + timedelta(days=rng.randint(180, 540))
+        revoked_at = None
         end = SIM_END
         roll = rng.random()
         if roll < P_MANDATE_EXPIRES:
@@ -207,7 +213,8 @@ def make_agents_and_mandates(principals, merchants, rng):
             end = min(end, expires)
         elif roll < P_MANDATE_EXPIRES + P_MANDATE_REVOKED:
             status = MandateStatus.REVOKED
-            end = created + timedelta(days=rng.randint(40, 100))
+            revoked_at = created + timedelta(days=rng.randint(40, 100))
+            end = revoked_at
 
         agents.append(Agent(
             agent_id=f"A{idx:04d}",
@@ -226,6 +233,7 @@ def make_agents_and_mandates(principals, merchants, rng):
             last_confirmed_at=created,
             expires_at=expires,
             status=status,
+            revoked_at=revoked_at,
         ))
         mandate_end[f"M{idx:04d}"] = min(end, SIM_END)
 
@@ -328,6 +336,7 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
 
     Route A - prompt injection hijack : features engineered (Section 10.5)
     Route B - delegation abuse        : features engineered
+      B variant - stale credential    : caught by policy, not the model
     Route C - counterfeit merchant    : NO features; HELD-OUT ONLY.
 
     Route C is restricted to held-out principals so it cannot influence
@@ -336,6 +345,7 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
     """
     merchant_by_id = {m.merchant_id: m for m in merchants}
     mandate_by_principal = {m.principal_id: m for m in mandates}
+    principal_by_id = {p.principal_id: p for p in principals}
 
     benign_merchants = {e.merchant_id for e in benign}
     recent_merchants = [
@@ -393,8 +403,10 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
     # Deliberately COMPLIANT: merchant in scope, total under the reserve.
     # If it breached the mandate, hard rules would catch it and the ML
     # layer would have nothing to do (Section 9.6.2).
+    b_burst_target = int(targets[AttackRoute.B_DELEGATION_ABUSE]
+                         * (1 - P_STALE_VARIANT))
     made = 0
-    while made < targets[AttackRoute.B_DELEGATION_ABUSE]:
+    while made < b_burst_target:
         p = rng.choice(principals)
         mandate = mandate_by_principal[p.principal_id]
         win = window_for(mandate)
@@ -426,6 +438,41 @@ def generate_attacks(principals, mandates, merchants, mandate_end,
             labels.append(Label(ev.event_id, True,
                                 AttackRoute.B_DELEGATION_ABUSE, "burst_drain"))
             made += 1
+
+    # ---------- Route B variant: stale credential use ----------
+    # Transactions AFTER the mandate was revoked or expired. Realistic
+    # (an attacker reusing a dead credential) and it makes hard rules
+    # H1 and H2 reachable. Caught by policy, not by the model -- that is
+    # the correct outcome and it is what H1/H2 exist for.
+    stale_target = max(int(targets[AttackRoute.B_DELEGATION_ABUSE]
+                           * P_STALE_VARIANT), 10)
+    made = 0
+    guard = 0
+    dead_mandates = [
+        m for m in mandates
+        if m.revoked_at is not None or m.expires_at < SIM_END
+    ]
+    while made < stale_target and dead_mandates and guard < 100_000:
+        guard += 1
+        mandate = rng.choice(dead_mandates)
+        p = principal_by_id[mandate.principal_id]
+        dead_from = mandate.revoked_at or mandate.expires_at
+        if dead_from >= SIM_END:
+            continue
+        span = (SIM_END - dead_from).total_seconds()
+        if span <= 60:
+            continue
+        ts = (dead_from + timedelta(seconds=rng.uniform(60, span))).replace(
+            microsecond=0)
+        merchant = merchant_by_id[rng.choice(mandate.merchant_scope)]
+        median_paise, sigma = SPEND_PARAMS[p.spend_profile]
+        amount = _draw_amount_paise(median_paise, sigma, rng)
+        ev = _make_event(ts, p, mandate, merchant, amount,
+                         _pick_weighted(B_INSTRUCTION_MIX, rng), rng)
+        events.append(ev)
+        labels.append(Label(ev.event_id, True,
+                            AttackRoute.B_DELEGATION_ABUSE, "stale_credential"))
+        made += 1
 
     # ---------- Route C: counterfeit merchant (HELD-OUT CONTROL) ----------
     made = 0
@@ -481,6 +528,8 @@ def write_outputs(events, labels, principals, agents, mandates,
                 d[k] = v.isoformat()
             elif isinstance(v, list):
                 d[k] = "|".join(v)
+            elif v is None:
+                d[k] = ""
         return d
 
     ev_rows = [rowify(e) for e in events]
@@ -531,11 +580,14 @@ def main():
 
     counts = {}
     principals_seen = {}
+    variants = {}
     for e in attacks:
-        r = label_by_id[e.event_id].attack_route
+        lab = label_by_id[e.event_id]
+        r = lab.attack_route
         s = splits[e.principal_id]
         counts[(s, r)] = counts.get((s, r), 0) + 1
         principals_seen.setdefault((s, r), set()).add(e.principal_id)
+        variants[lab.attack_variant] = variants.get(lab.attack_variant, 0) + 1
 
     benign_merchants = {e.merchant_id for e in benign}
     attack_merchants = {e.merchant_id for e in attacks}
@@ -551,7 +603,8 @@ def main():
         lab = label_by_id[e.event_id]
         if breach:
             tripped_total += 1
-        if lab.attack_route == AttackRoute.B_DELEGATION_ABUSE:
+        if (lab.attack_route == AttackRoute.B_DELEGATION_ABUSE
+                and lab.attack_variant == "burst_drain"):
             b_total += 1
             if breach:
                 tripped_b += 1
@@ -559,6 +612,9 @@ def main():
     split_sizes = {}
     for s in splits.values():
         split_sizes[s] = split_sizes.get(s, 0) + 1
+
+    n_revoked = sum(1 for m in mandates if m.revoked_at is not None)
+    n_expiring = sum(1 for m in mandates if m.expires_at < SIM_END)
 
     print(f"seed              : {args.seed}")
     print(f"total events      : {len(all_events):,}")
@@ -573,15 +629,20 @@ def main():
             k = len(principals_seen.get((s, r), []))
             parts.append(f"{r.value}={n}/{k}")
         print(f"  {s:8s} {'  '.join(parts)}")
+    print("--- attack variants ---")
+    for v, n in sorted(variants.items()):
+        print(f"  {v:<18}: {n}")
     print("--- integrity checks ---")
     print(f"L1 attack merchants in benign : {overlap:.1%}  (want 100%)")
     print(f"L7 split is by principal      : yes")
     print(f"Route C outside holdout       : "
           f"{sum(counts.get((s, AttackRoute.C_COUNTERFEIT_MERCHANT), 0) for s in ['train','val'])}"
           f"  (want 0)")
-    print(f"H3 fires on Route B           : {tripped_b}/{b_total} "
+    print(f"H3 fires on burst_drain       : {tripped_b}/{b_total} "
           f"= {tripped_b / max(b_total,1):.1%}  (want low)")
     print(f"H3 fires overall              : {tripped_total / len(all_events):.2%}")
+    print(f"mandates revoked              : {n_revoked}  (H1 reachable)")
+    print(f"mandates expiring in window   : {n_expiring}  (H2 reachable)")
     print(f"files written to              : {OUT_DIR.resolve()}")
 
 

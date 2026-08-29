@@ -103,3 +103,33 @@
   (benign median 0.00), and the alternative -- unbounded ratios reaching
   678 -- would destabilise logistic regression. Recorded so the clip is a
   stated design choice rather than a hidden one.
+
+  - Route A realism limitation: the injected merchant is drawn uniformly from
+  all out-of-scope merchants, so it usually mismatches the agent's category
+  as well. Real injection would more often redirect to a plausible merchant
+  in the same category, making category_matches_agent_type less informative.
+  Route A recall here is therefore likely optimistic. Not corrected, because
+  regenerating would invalidate downstream verification with 8 days left.
+  Stated rather than hidden.
+
+  - H1 (mandate revoked) fired on 682 legitimate transactions -- 1.71% of all
+  traffic wrongly recommended for block. Cause: the Mandate schema carried a
+  status field with no revocation timestamp, so the rule treated "revoked"
+  as true for all time, including transactions weeks before revocation.
+  Separately, H2 (expired) never fired at all, because transaction generation
+  stopped at the mandate end date, so nothing ever occurred after expiry.
+  Two of four hard rules were therefore broken or dead.
+  Fix: added revoked_at to the schema, made H1 time-aware, and added a
+  "stale credential" attack variant -- transactions after revocation or
+  expiry -- which is realistic and makes both rules reachable.
+  Lesson: a status field without a timestamp is not enough to reason about
+  time. Rule fire-rate tables catch this; model accuracy never would.
+
+  - Fix verified: H1 false positives went 682 -> 0 after adding revoked_at and
+  making the rule time-aware. H2 went from dead (0 fires) to 21. Benign
+  critical rate dropped 2.2% -> 0.5%.
+  Note on the route table: Route A and C show ~100% elevated because both
+  always use out-of-scope merchants, so H4 fires. That is rules doing rules'
+  work. The model's real task on Route A is separating it from the 4.9% of
+  BENIGN traffic that is also out-of-scope -- a harder problem than the
+  headline number suggests.
