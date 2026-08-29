@@ -50,6 +50,11 @@ DEFAULT_T_BLOCK = 0.85
 MIN_HISTORY_DAYS = 7.0
 LOW_CONFIDENCE_DAYS = 30.0
 
+# Reference points for factor attribution: the benign median and IQR of
+# each feature, measured on the TRAIN split by eval/build_reference.py.
+_REFERENCE_PATH = Path("config/feature_reference.json")
+_REFERENCE = None
+
 
 class Action:
     ALLOW = "allow"
@@ -154,17 +159,55 @@ def decide(rule_result: RuleResult,
     )
 
 
+def _load_reference() -> dict:
+    global _REFERENCE
+    if _REFERENCE is None:
+        if _REFERENCE_PATH.exists():
+            with open(_REFERENCE_PATH) as f:
+                _REFERENCE = json.load(f)
+        else:
+            _REFERENCE = {}
+    return _REFERENCE
+
+
 def top_factors(feature_values: dict, k: int = 3) -> list:
     """Rank contributing features for the audit record (rule R9).
 
-    Placeholder ranking by absolute deviation. Replaced by SHAP in
-    explain.py now that gradient boosting was selected (Section 11.7).
+    HEURISTIC, not true attribution. Ranks by normalised deviation from
+    the benign median, scaled by that feature's own benign interquartile
+    range, so a value is judged unusual relative to how that feature
+    normally varies.
+
+    An earlier version sorted on raw absolute value, so days_to_expiry
+    (~307) and mandate_age_days (~52) topped every record simply for
+    being large numbers, while the feature that actually drove the
+    decision -- merchant_new_to_principal at 1.0 -- never appeared
+    (BUGLOG).
+
+    KNOWN LIMITATION: six features are binary with benign IQR = 0
+    (merchant_new_to_principal, outside_active_hours, is_external_content,
+    category_new_to_principal, txn_count_1h, velocity_ratio_1h), so the
+    spread floor makes any firing binary feature rank very high
+    regardless of its actual contribution. True per-decision attribution
+    requires SHAP on the gradient boosting model (Section 11.7); this is
+    a stand-in that is directionally useful and clearly labelled as such.
     """
-    ranked = sorted(
-        ((n, v) for n, v in feature_values.items()
-         if v is not None and not (isinstance(v, float) and np.isnan(v))),
-        key=lambda kv: abs(kv[1]), reverse=True)
-    return [n for n, _ in ranked[:k]]
+    ref = _load_reference()
+    scored = []
+    for name, v in feature_values.items():
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            continue
+        r = ref.get(name)
+        if r is None:
+            continue
+        spread = max(r["iqr"], 1e-6)
+        scored.append((name, abs(float(v) - r["median"]) / spread))
+
+    if not scored:      # no reference file yet -- degrade, do not crash
+        return []
+
+    scored.sort(key=lambda kv: kv[1], reverse=True)
+    return [n for n, _ in scored[:k]]
 
 
 def main():
@@ -189,6 +232,10 @@ def main():
           f"t2={thresholds['t_block']:.2f}  [{thresholds['source']}]")
     if thresholds["source"] != "derived":
         print("  WARNING: using defaults. Run eval/cost_model.py first.")
+
+    ref = _load_reference()
+    print(f"reference : {len(ref)} features "
+          f"{'loaded' if ref else 'MISSING -- run eval/build_reference.py'}")
 
     probs = model.predict_proba(val[FEATURE_NAMES].values)[:, 1]
     val_events = [e for e in ctx.events if ctx.splits[e.principal_id] == "val"]

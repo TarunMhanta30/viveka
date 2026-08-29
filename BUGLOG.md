@@ -186,3 +186,24 @@
   happened, and add a second test that alters an amount by one paise.
   Lesson: a test that cannot fail proves nothing. I nearly shipped a
   tamper-evidence claim backed by a test that never tampered.
+
+  - top_factors() reported meaningless attribution. It ranked features by raw
+  absolute value, so days_to_expiry (~307) and mandate_age_days (~52) topped
+  every record simply for being large numbers, while the feature that
+  actually drove the decision -- merchant_new_to_principal at 1.0 -- never
+  appeared. Requirement R9 was visibly unmet, in every audit record and in
+  the demo output.
+  Fix: rank by deviation from the benign median, scaled by that feature's
+  own interquartile range, computed on benign TRAIN rows only.
+  Lesson: attribution needs a reference point. "Large" is not "unusual", and
+  I would not have caught this without printing a real decision's factors.
+
+  - The top_factors fix improved attribution but is still a heuristic, not
+  true attribution. Six features are binary with benign IQR = 0, so the
+  1e-6 spread floor makes any firing binary feature rank near the top
+  regardless of contribution -- is_external_content appeared on a decision
+  it did not drive.
+  Labelled as a known limitation rather than presented as attribution.
+  Real per-decision attribution needs SHAP on the gradient boosting model.
+  Lesson: fixing an obviously-wrong ranking with a slightly-less-wrong one
+  is progress, but calling it attribution would be a false claim.

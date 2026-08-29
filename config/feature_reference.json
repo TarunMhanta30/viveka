@@ -1,0 +1,147 @@
+{
+  "mandate_age_days": {
+    "median": 52.51472800925926,
+    "iqr": 55.607534722222226,
+    "n": 23548
+  },
+  "days_since_confirmation": {
+    "median": 52.51472800925926,
+    "iqr": 55.607534722222226,
+    "n": 23548
+  },
+  "utilisation_rate": {
+    "median": 0.19516602648707596,
+    "iqr": 0.23297216096222986,
+    "n": 23548
+  },
+  "utilisation_velocity": {
+    "median": 0.42421131604678114,
+    "iqr": 0.3772980314910246,
+    "n": 23548
+  },
+  "amount_vs_reserve_ratio": {
+    "median": 0.03312234245201125,
+    "iqr": 0.028441106516469746,
+    "n": 23548
+  },
+  "days_to_expiry": {
+    "median": 308.7403356481482,
+    "iqr": 185.71377025462962,
+    "n": 23548
+  },
+  "txn_count_1h": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 23548
+  },
+  "txn_count_24h": {
+    "median": 0.0,
+    "iqr": 1.0,
+    "n": 23548
+  },
+  "txn_count_7d": {
+    "median": 2.0,
+    "iqr": 2.0,
+    "n": 23548
+  },
+  "velocity_ratio_1h": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 22828
+  },
+  "velocity_ratio_24h": {
+    "median": 0.0,
+    "iqr": 1.703038676697531,
+    "n": 22828
+  },
+  "interarrival_zscore": {
+    "median": -0.30325398939798237,
+    "iqr": 1.3461038975331832,
+    "n": 21390
+  },
+  "amount_sum_1h_ratio": {
+    "median": 0.3392733831950918,
+    "iqr": 0.3460757647356875,
+    "n": 22828
+  },
+  "amount_log_zscore": {
+    "median": -0.06196419919298131,
+    "iqr": 1.3882586615025354,
+    "n": 21390
+  },
+  "amount_percentile": {
+    "median": 0.5,
+    "iqr": 0.5505050505050505,
+    "n": 22828
+  },
+  "amount_vs_median_ratio": {
+    "median": 0.9945420620857647,
+    "iqr": 0.7749186585453817,
+    "n": 22828
+  },
+  "hour_of_day": {
+    "median": 14.0,
+    "iqr": 6.0,
+    "n": 23548
+  },
+  "outside_active_hours": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 23548
+  },
+  "hour_deviation": {
+    "median": 2.9529805607021107,
+    "iqr": 3.0410353715788103,
+    "n": 22828
+  },
+  "is_weekend": {
+    "median": 0.0,
+    "iqr": 1.0,
+    "n": 23548
+  },
+  "days_since_last_txn": {
+    "median": 2.0636111111111113,
+    "iqr": 3.2763020833333334,
+    "n": 22828
+  },
+  "merchant_new_to_principal": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 22828
+  },
+  "txn_count_with_merchant": {
+    "median": 5.0,
+    "iqr": 8.0,
+    "n": 23548
+  },
+  "category_new_to_principal": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 22828
+  },
+  "category_matches_agent_type": {
+    "median": 1.0,
+    "iqr": 0.0,
+    "n": 23548
+  },
+  "merchant_concentration": {
+    "median": 0.98,
+    "iqr": 0.09677419354838712,
+    "n": 22828
+  },
+  "is_external_content": {
+    "median": 0.0,
+    "iqr": 0.0,
+    "n": 23548
+  },
+  "external_content_rate_deviation": {
+    "median": -0.08695652173913043,
+    "iqr": 0.14285714285714285,
+    "n": 19959
+  },
+  "principal_history_days": {
+    "median": 50.88100115740741,
+    "iqr": 55.682583912037046,
+    "n": 23548
+  }
+}
