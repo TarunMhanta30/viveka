@@ -1,0 +1,68 @@
+{
+  "model": "gradient_boosting",
+  "thresholds": {
+    "t_step": 0.45,
+    "t_block": 0.7500000000000001,
+    "source": "derived"
+  },
+  "with_route_c": {
+    "n": 8118,
+    "n_attacks": 302,
+    "base_rate": 0.037201281103720125,
+    "pr_auc": 0.6269712912309447,
+    "roc_auc": 0.9461217268703357,
+    "brier": 0.020995205892441318,
+    "ece": 0.014686739092782732,
+    "precision": 0.3720316622691293,
+    "recall": 0.9337748344370861,
+    "f1": 0.5320754716981133,
+    "tp": 282,
+    "fp": 476,
+    "fn": 20,
+    "tn": 7340,
+    "recall_by_route": {
+      "A": 1.0,
+      "B": 0.7560975609756098,
+      "C": 1.0
+    },
+    "recall_by_variant": {
+      "blatant": 1.0,
+      "burst_drain": 0.7435897435897436,
+      "stale_credential": 1.0,
+      "subtle": 1.0,
+      "underpriced": 1.0
+    }
+  },
+  "without_route_c": {
+    "n": 7959,
+    "n_attacks": 143,
+    "base_rate": 0.01796708129161955,
+    "pr_auc": 0.7034146384586378,
+    "roc_auc": 0.9735758100650629,
+    "brier": 0.009171993232557386,
+    "ece": 0.004037324297611415,
+    "precision": 0.20534223706176963,
+    "recall": 0.8601398601398601,
+    "f1": 0.33153638814016173,
+    "tp": 123,
+    "fp": 476,
+    "fn": 20,
+    "tn": 7340,
+    "recall_by_route": {
+      "A": 1.0,
+      "B": 0.7560975609756098
+    },
+    "recall_by_variant": {
+      "blatant": 1.0,
+      "burst_drain": 0.7435897435897436,
+      "stale_credential": 1.0,
+      "subtle": 1.0
+    }
+  },
+  "evasion": {
+    "n": 78,
+    "naive_recall": 0.7564102564102564,
+    "evasive_recall": 0.6538461538461539,
+    "degradation": 0.10256410256410253
+  }
+}

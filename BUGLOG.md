@@ -207,3 +207,13 @@
   Real per-decision attribution needs SHAP on the gradient boosting model.
   Lesson: fixing an obviously-wrong ranking with a slightly-less-wrong one
   is progress, but calling it attribution would be a false claim.
+
+  - Corrected a claim I had been making: Route C at 100% recall is NOT
+  evidence of model generalisation. Route C always uses an out-of-scope
+  merchant, so hard rule H4 fires on every event and flags it as step_up.
+  Same for Route A at 100%. The rules caught them, not the model.
+  Route B (in-scope, policy-compliant by design) at 75.6% is the ONLY
+  route that measures the model.
+  Lesson: a per-route recall table that mixes rule and model decisions
+  cannot tell you what the model did. The measurement has to isolate the
+  layer being evaluated.
