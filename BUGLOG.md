@@ -152,3 +152,28 @@
   doubling it shifts t1 from 0.10 to 0.40.
   Useful outcome: of three assumed parameters, only one is decision-relevant,
   and it is one Razorpay can measure directly.
+
+- Methodological gap: cost_model.py sweeps thresholds using the ML score
+  alone, but fusion.py applies the rule floor on top. Result: the cost model
+  reported 0% benign blocked while the deployed path blocks 0.7% (H3 firing
+  on benign reserve breaches). The thresholds were therefore optimised
+  against a decision path the system does not use.
+  Also: 9.7% of validation events have <7 days history, so the ML score is
+  suppressed and only rules apply -- a real coverage gap, not a bug.
+  Lesson: optimise against the decision the system actually makes, not
+  against one component of it.
+
+  - Fixed the cost model to sweep thresholds through the full fusion decision
+  path rather than the ML score alone. Consequences:
+  1. Total cost rose 121k -> 510k. The old figure was fiction; it omitted
+     the rule floor that the deployed system applies.
+  2. t1 moved 0.10 -> 0.45. With rules already catching most of Route A,
+     aggressive score-based step-up adds friction without adding catches.
+  3. Saving vs hand-picked thresholds collapsed from 10.4% to 1.6-2.5%.
+     The cost surface is flat; threshold tuning is not where the value is.
+  4. New baseline "rules only (no ML)" costs 801k vs 510k with ML -- a
+     36.3% saving. THAT is where the value is, and it is the answer to
+     "why not just write rules".
+  Lesson: optimising a component in isolation produced a number that looked
+  good and was wrong. Optimising the whole path produced a worse-looking
+  number that is true, and revealed where the real gain comes from.

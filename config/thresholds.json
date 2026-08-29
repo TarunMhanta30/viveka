@@ -1,7 +1,8 @@
 {
-  "t_step": 0.1,
+  "t_step": 0.45,
   "t_block": 0.7500000000000001,
   "derived_on": "validation",
+  "optimised_through": "full fusion decision path",
   "costs": {
     "avg_fraud_value_paise": 581773.8910891089,
     "dispute_handling_paise": 30000,
