@@ -177,3 +177,12 @@
   Lesson: optimising a component in isolation produced a number that looked
   good and was wrong. Optimising the whole path produced a worse-looking
   number that is true, and revealed where the real gain comes from.
+
+  - Tamper test reported "MISSED" -- but the chain was fine; the TEST was
+  broken. It set recommended_action to "allow" on record 10, and since 93%
+  of records are already "allow", the tamper was a no-op. The hash matched
+  because nothing had changed.
+  Fix: flip to a value guaranteed to differ, assert the change actually
+  happened, and add a second test that alters an amount by one paise.
+  Lesson: a test that cannot fail proves nothing. I nearly shipped a
+  tamper-evidence claim backed by a test that never tampered.
