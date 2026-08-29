@@ -145,4 +145,10 @@
   during LR calibration. A scipy/sklearn version interaction, no effect on
   results. Left visible rather than suppressed.
 
-  
+  - Sensitivity finding: churn penalty has ZERO effect on the derived
+  thresholds (x2 and x0.5 give identical results), because no benign
+  transaction scores above t2=0.75, so the churn term is never invoked.
+  Abandonment rate is the only assumed parameter that moves the answer --
+  doubling it shifts t1 from 0.10 to 0.40.
+  Useful outcome: of three assumed parameters, only one is decision-relevant,
+  and it is one Razorpay can measure directly.

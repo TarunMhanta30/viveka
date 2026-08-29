@@ -1,0 +1,11 @@
+{
+  "t_step": 0.1,
+  "t_block": 0.7500000000000001,
+  "derived_on": "validation",
+  "costs": {
+    "avg_fraud_value_paise": 581773.8910891089,
+    "dispute_handling_paise": 30000,
+    "abandonment_rate": 0.15,
+    "churn_penalty_paise": 200000
+  }
+}
