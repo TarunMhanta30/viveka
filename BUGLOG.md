@@ -133,3 +133,16 @@
   work. The model's real task on Route A is separating it from the 4.9% of
   BENIGN traffic that is also out-of-scope -- a harder problem than the
   headline number suggests.
+
+  - Route C being holdout-only raises the holdout base rate to ~3.7% versus
+  1.29% in validation. PR-AUC increases mechanically with base rate, so
+  holdout and validation PR-AUC are not directly comparable. evaluate.py
+  must report holdout both with and without Route C.
+  Lesson: an experimental control placed in one split changes that split's
+  class balance. The control is still correct; the comparison needs care.
+
+- Cosmetic: sklearn emits OptimizeWarning "Unknown solver options: iprint"
+  during LR calibration. A scipy/sklearn version interaction, no effect on
+  results. Left visible rather than suppressed.
+
+  
