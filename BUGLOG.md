@@ -228,3 +228,35 @@
   step-up on the full path. Most false positives come from H4 firing on
   legitimate new-merchant purchases, not from the model.
   Lesson: aggregate metrics on a layered system hide which layer is working.
+
+  - Layer ablation produced a finding against my own architecture: model-only
+  costs Rs 410,784 while model+rules costs Rs 526,932. The rule layer makes
+  the system 28% MORE expensive, because H4 fires on 5.85% of traffic --
+  mostly legitimate customers trying new merchants -- and each step-up costs
+  15% of transaction value in expected abandonment.
+  Decision: keep H1/H2/H3 (revoked, expired, reserve exceeded) because they
+  are policy controls, not optimisations -- a PSP cannot let a model approve
+  a payment on withdrawn consent. Report H4 as a business judgment the cost
+  data argues against, at this threshold and these assumed costs.
+  Also: 2 of 29 features have zero permutation importance.
+  days_since_confirmation is mathematically identical to mandate_age_days
+  because no confirmations occur in the simulation; txn_count_7d is
+  subsumed by the 1h and 24h windows. Both kept and reported --
+  days_since_confirmation would diverge in production.
+  Lesson: an ablation that validates everything you built is an ablation
+  that was not testing anything.
+
+  - Layer ablation on holdout: model-only costs Rs 395,404, model+rules costs
+  Rs 842,914. Rules more than double cost and catch only 3.7% of attacks
+  alone. Kept anyway: H1/H2/H3 enforce withdrawn, expired and exceeded
+  consent. A PSP cannot delegate that to a model at any price. The cost
+  model prices money, not permission.
+- days_since_confirmation still has zero permutation importance after the
+  confirmation simulation was added. Correlation with mandate_age_days fell
+  1.0000 -> 0.66, so the fix worked mechanically, but LR extracts nothing
+  extra from it. Reported as a fix that did not matter.
+- Nine features show negative permutation importance under LR -- shuffling
+  them improves the model, meaning LR is fitting noise on them. A known cost
+  of shipping the more interpretable model.
+
+  

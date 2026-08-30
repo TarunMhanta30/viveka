@@ -34,6 +34,7 @@ from pathlib import Path
 import numpy as np
 
 from src import rules as rules_mod
+from src.rules import RULE_NAMES
 from src.audit import AuditWriter
 from src.context import Context
 from src.features import FEATURE_NAMES, extract, to_vector
@@ -41,7 +42,6 @@ from src.fusion import Action, decide, load_thresholds, top_factors
 from src.rules import Severity
 
 MODEL_PATH = Path("models/model.pkl")
-RULE_NAMES = ["H1", "H2", "H3", "H4"]
 
 
 @dataclass

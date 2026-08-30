@@ -7,7 +7,7 @@ See Section 9 for the design reasoning behind each field.
 Money is ALWAYS stored as integer paise, never float rupees.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -104,7 +104,14 @@ class Agent:
 
 @dataclass
 class Mandate:
-    """The consent artifact. Caps how much, but not how."""
+    """The consent artifact. Caps how much, but not how.
+
+    confirmation_times records every occasion the principal actively
+    re-affirmed the mandate -- in production, each step-up approval
+    refreshes it (Section 12.7). Without these events feature 2
+    (days_since_confirmation) is mathematically identical to feature 1
+    (mandate_age_days) and contributes nothing.
+    """
     mandate_id: str
     principal_id: str
     agent_id: str
@@ -115,6 +122,7 @@ class Mandate:
     expires_at: datetime
     status: MandateStatus = MandateStatus.ACTIVE
     revoked_at: Optional[datetime] = None   # when revocation took effect
+    confirmation_times: list[datetime] = field(default_factory=list)
 
 
 @dataclass

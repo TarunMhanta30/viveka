@@ -10,6 +10,10 @@ LEAKAGE RULE L5 (Section 9.9) is enforced HERE and nowhere else.
 Every history slice is strictly before the event timestamp. If each
 feature enforced this itself, one would eventually forget. Enforcing
 it in one place makes the mistake structurally impossible.
+
+That applies to confirmations too: last_confirmation_before() only
+counts step-up approvals that had already happened at the time of the
+transaction being scored.
 """
 
 import bisect
@@ -122,6 +126,7 @@ class MandateRow:
     expires_at: datetime
     status: str
     revoked_at: datetime | None = None
+    confirmation_times: list = field(default_factory=list)
 
 
 @dataclass
@@ -188,6 +193,11 @@ class Context:
         def dt(s):
             return datetime.fromisoformat(s)
 
+        def dt_list(s):
+            if not s:
+                return []
+            return [datetime.fromisoformat(x) for x in s.split("|") if x]
+
         events = []
         with open(data_dir / "events.csv") as f:
             for r in csv.DictReader(f):
@@ -219,6 +229,7 @@ class Context:
                     expires_at=dt(r["expires_at"]),
                     status=r["status"],
                     revoked_at=dt(r["revoked_at"]) if r.get("revoked_at") else None,
+                    confirmation_times=dt_list(r.get("confirmation_times", "")),
                 ))
 
         merchants = []
@@ -274,6 +285,25 @@ class Context:
             return []
         cut = bisect.bisect_left(times, ts)
         return self._timeline[principal_id][:cut]
+
+    def last_confirmation_before(self, mandate_id: str,
+                                 ts: datetime) -> datetime:
+        """When the principal last actively affirmed this mandate, as at ts.
+
+        Falls back to created_at when no confirmation has yet occurred --
+        the original consent IS the first affirmation.
+
+        L5 applies: a confirmation that happens AFTER the transaction
+        being scored must not influence that transaction's features.
+        """
+        mandate = self.mandates[mandate_id]
+        prior = [c for c in mandate.confirmation_times if c < ts]
+        return max(prior) if prior else mandate.created_at
+
+    def confirmation_count_before(self, mandate_id: str, ts: datetime) -> int:
+        """How many times the principal has affirmed this mandate, as at ts."""
+        mandate = self.mandates[mandate_id]
+        return sum(1 for c in mandate.confirmation_times if c < ts)
 
     def consumed_before(self, mandate_id: str, ts: datetime) -> int:
         """Paise spent on this mandate in ts's calendar month, before ts.
@@ -360,7 +390,10 @@ def main():
     print(f"merchants : {len(ctx.merchants):,}")
 
     n_revoked = sum(1 for m in ctx.mandates.values() if m.revoked_at is not None)
+    n_conf = sum(1 for m in ctx.mandates.values() if m.confirmation_times)
+    total_conf = sum(len(m.confirmation_times) for m in ctx.mandates.values())
     print(f"revoked   : {n_revoked}  (with a revocation timestamp)")
+    print(f"confirming: {n_conf} mandates, {total_conf} confirmations")
 
     # --- L5 check: no history entry may be at or after the event ---
     violations = 0
@@ -372,6 +405,32 @@ def main():
             violations += 1
     print(f"\nL5 check  : {checked} events sampled, {violations} violations "
           f"(want 0)")
+
+    # --- L5 on confirmations: none may be at or after the event ---
+    conf_violations = 0
+    for e in ctx.events[::37]:
+        m = ctx.mandates[e.mandate_id]
+        last = ctx.last_confirmation_before(e.mandate_id, e.timestamp)
+        # created_at is the fallback when no confirmation has occurred.
+        # A mandate created at the same instant as its first transaction
+        # is not leakage -- the consent necessarily preceded the payment.
+        if last == m.created_at:
+            continue
+        if last >= e.timestamp:
+            conf_violations += 1
+    print(f"L5 (confirm): {conf_violations} violations (want 0)")
+
+    # --- do features 1 and 2 now differ? ---
+    diffs = 0
+    for e in ctx.events[::37]:
+        m = ctx.mandates[e.mandate_id]
+        last = ctx.last_confirmation_before(e.mandate_id, e.timestamp)
+        if last != m.created_at:
+            diffs += 1
+    print(f"events where last confirmation != created_at: "
+          f"{diffs}/{checked} = {diffs/checked:.1%}")
+    print("  (this is what makes days_since_confirmation differ from "
+          "mandate_age_days)")
 
     # --- cold start distribution ---
     empty = sum(1 for e in ctx.events[::37]
@@ -392,11 +451,8 @@ def main():
     print(f"  ext content rate: {bl.ext_content_rate:.2f}")
     print(f"  distinct merch  : {len(bl.merchant_counts)}")
 
-    # --- agent lookup sanity ---
     ag = ctx.agents[late.agent_id]
     print(f"\nagent {ag.agent_id} type: {ag.agent_type}")
-
-    # --- circular hour sanity ---
     print(f"circular distance 23h to 1h : "
           f"{circular_hour_distance(23, 1):.0f}  (want 2)")
 

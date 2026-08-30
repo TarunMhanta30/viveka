@@ -1,26 +1,39 @@
 """
 VIVEKA — hard policy rules (Layer 1).
 
-Four deterministic checks, evaluated BEFORE the ML layer.
-Design: Section 11.2.
+THREE deterministic checks, evaluated BEFORE the ML layer.
+Design: Section 11.2, revised after the ablation (Section 21).
 
 WHY THESE ARE NOT ML FEATURES
-  A mandate breach is a fact, not a probability. Passing it to a model
+  A mandate breach is a FACT, not a probability. Passing it to a model
   invites the model to overrule policy, which is indefensible to a
-  merchant and to a regulator (Section 11.2.1).
+  merchant and to a regulator.
 
-SEVERITY
-  H1/H2/H3 -> CRITICAL. No valid authority exists. Recommend block.
-  H4       -> ELEVATED. Authority exists but intent is unclear. The
-              principal may genuinely want a new merchant, so this is a
-              question, not a decline. Recommend step-up.
+H4 WAS REMOVED, AND WHY THAT IS PRINCIPLED
+  Section 11 draws the line as: policy violations are FACTS, ML is for
+  JUDGMENT. H1, H2 and H3 are facts -- the mandate is dead, or the
+  amount exceeds what was ever granted. There is nothing to interpret.
 
-NO FAKE SCORE
-  A violation does NOT get a probability. A policy breach is certainty
-  about policy combined with uncertainty about intent; expressing it as
-  0.99 would make the audit record claim a judgment the model never
-  made (Section 11.2.3). The decision gate receives the flag and the
-  score separately.
+  H4 (merchant outside the approved list) was never a fact of that
+  kind. Authority EXISTS; only intent is unclear. It was miscategorised
+  from the start, and the ablation made the cost of that visible: H4
+  fired on 5.85% of all traffic -- mostly legitimate customers trying a
+  new shop -- and forced a step-up regardless of any other signal. The
+  layer ablation showed rules+model cost MORE than model alone, and H4
+  was the reason.
+
+  It now lives in features.py as merchant_in_mandate_scope, where the
+  model weighs it against 30 other signals instead of acting alone.
+
+  This is not the cost model overriding policy. H1/H2/H3 remain
+  absolute and are NOT tuned on cost -- a PSP cannot let a model
+  approve a payment on withdrawn consent at any price. H4 was always a
+  judgment, and judgment belongs in the model.
+
+ALL RULES ARE CRITICAL NOW
+  Every remaining rule means no valid authority exists. The ELEVATED
+  severity level is retained in the enum because fusion.py's escalation
+  ordering depends on it and a future policy rule may need it.
 
 TIME-AWARENESS
   Every rule is evaluated AS AT the event timestamp. An earlier version
@@ -48,7 +61,7 @@ _RANK = {Severity.NONE: 0, Severity.ELEVATED: 1, Severity.CRITICAL: 2}
 @dataclass
 class RuleResult:
     """Outcome of evaluating all hard rules for one event."""
-    fired: list          # rule codes that triggered, e.g. ["H3", "H4"]
+    fired: list          # rule codes that triggered, e.g. ["H3"]
     severity: Severity
     reasons: list        # human-readable, one per fired rule
 
@@ -58,7 +71,7 @@ class RuleResult:
 
 
 # ---------------------------------------------------------------
-# The four rules
+# The three rules
 # ---------------------------------------------------------------
 
 def h1_mandate_revoked(ev, mandate, ctx):
@@ -95,24 +108,14 @@ def h3_reserve_exceeded(ev, mandate, ctx):
     return None
 
 
-def h4_scope_violation(ev, mandate, ctx):
-    """H4 (ELEVATED). Merchant outside the mandate's approved list.
+_RULES = [h1_mandate_revoked, h2_mandate_expired, h3_reserve_exceeded]
 
-    Deliberately NOT critical. The principal may genuinely want to try a
-    new merchant. Blocking that is the over-blocking that destroys
-    agentic commerce (Section 3.4). Ask, don't decline.
-    """
-    if ev.merchant_id not in mandate.merchant_scope:
-        return "H4", Severity.ELEVATED, "Merchant outside approved list"
-    return None
-
-
-_RULES = [h1_mandate_revoked, h2_mandate_expired,
-          h3_reserve_exceeded, h4_scope_violation]
+# Recorded in every audit entry so a reader knows which rules ran.
+RULE_NAMES = ["H1", "H2", "H3"]
 
 
 def evaluate(ev: EventRow, ctx: Context) -> RuleResult:
-    """Run all four rules. Most severe result wins."""
+    """Run all rules. Most severe result wins."""
     mandate = ctx.mandates[ev.mandate_id]
     fired, reasons = [], []
     severity = Severity.NONE
@@ -159,9 +162,11 @@ def main():
     total = len(ctx.events)
     print(f"events evaluated : {total:,}")
     print(f"any violation    : {n_violation:,} ({n_violation / total:.2%})")
+    print(f"  (was 6.49% with H4 -- most of that was H4 firing on")
+    print(f"   legitimate customers trying a new merchant)")
 
     print("\nfire rate per rule (and how many were on benign traffic):")
-    for code in ["H1", "H2", "H3", "H4"]:
+    for code in RULE_NAMES:
         n = counts.get(code, 0)
         fp = fp_counts.get(code, 0)
         print(f"  {code}: {n:6,}  ({n / total:.2%})   on benign: {fp:5,}")
@@ -177,6 +182,10 @@ def main():
             n = by_route.get((route, sev), 0)
             parts.append(f"{n / row_total:>11.1%}")
         print(f"{route:<10}{''.join(parts)}")
+    print("\n  Routes A and C should now be ~100% 'none': the rules no")
+    print("  longer catch them. Whether they are detected is now entirely")
+    print("  the model's job -- which is what makes the recall numbers")
+    print("  a genuine measure of the model.")
 
 
 if __name__ == "__main__":

@@ -88,6 +88,14 @@ P_B_OFF_HOURS = 0.65   # not every drain happens at 3am
 P_MANDATE_EXPIRES = 0.04
 P_MANDATE_REVOKED = 0.03
 
+# --- Step-up confirmations (Section 12.7) ---
+# In production every step-up approval refreshes last_confirmed_at.
+# Without these events, days_since_confirmation is mathematically
+# identical to mandate_age_days and contributes nothing to the model
+# (permutation importance 0.0000 -- BUGLOG).
+P_PRINCIPAL_CONFIRMS = 0.55        # share of principals who ever confirm
+CONFIRMATIONS_PER_PRINCIPAL = (1, 4)
+
 # --- Attack parameters (Section 9.6) ---
 ATTACK_RATE  = 0.02
 ROUTE_SPLIT  = {AttackRoute.A_INJECTION: 0.30,
@@ -173,6 +181,10 @@ def make_agents_and_mandates(principals, merchants, rng):
     revoked_at records WHEN revocation took effect. Status alone is not
     enough: without a timestamp, H1 would flag every transaction on that
     mandate including ones that were valid when they happened (BUGLOG).
+
+    confirmation_times simulates step-up approvals. Each one refreshes
+    the principal's active affirmation of the mandate, which is what
+    makes days_since_confirmation differ from mandate_age_days.
     """
     agents, mandates = [], []
     mandate_end = {}
@@ -216,6 +228,15 @@ def make_agents_and_mandates(principals, merchants, rng):
             revoked_at = created + timedelta(days=rng.randint(40, 100))
             end = revoked_at
 
+        # Step-up confirmations, spread across the mandate's active life.
+        confirmations = []
+        if rng.random() < P_PRINCIPAL_CONFIRMS:
+            active_days = max((min(end, SIM_END) - created).days, 1)
+            for _ in range(rng.randint(*CONFIRMATIONS_PER_PRINCIPAL)):
+                offset = rng.uniform(1, active_days)
+                confirmations.append(created + timedelta(days=offset))
+            confirmations.sort()
+
         agents.append(Agent(
             agent_id=f"A{idx:04d}",
             principal_id=p.principal_id,
@@ -234,6 +255,7 @@ def make_agents_and_mandates(principals, merchants, rng):
             expires_at=expires,
             status=status,
             revoked_at=revoked_at,
+            confirmation_times=confirmations,
         ))
         mandate_end[f"M{idx:04d}"] = min(end, SIM_END)
 
@@ -527,7 +549,10 @@ def write_outputs(events, labels, principals, agents, mandates,
             if isinstance(v, datetime):
                 d[k] = v.isoformat()
             elif isinstance(v, list):
-                d[k] = "|".join(v)
+                # datetimes inside a list need converting too
+                d[k] = "|".join(
+                    x.isoformat() if isinstance(x, datetime) else str(x)
+                    for x in v)
             elif v is None:
                 d[k] = ""
         return d
@@ -615,6 +640,8 @@ def main():
 
     n_revoked = sum(1 for m in mandates if m.revoked_at is not None)
     n_expiring = sum(1 for m in mandates if m.expires_at < SIM_END)
+    n_confirming = sum(1 for m in mandates if m.confirmation_times)
+    n_confirmations = sum(len(m.confirmation_times) for m in mandates)
 
     print(f"seed              : {args.seed}")
     print(f"total events      : {len(all_events):,}")
@@ -643,6 +670,8 @@ def main():
     print(f"H3 fires overall              : {tripped_total / len(all_events):.2%}")
     print(f"mandates revoked              : {n_revoked}  (H1 reachable)")
     print(f"mandates expiring in window   : {n_expiring}  (H2 reachable)")
+    print(f"mandates with confirmations   : {n_confirming} "
+          f"({n_confirmations} total confirmations)")
     print(f"files written to              : {OUT_DIR.resolve()}")
 
 
