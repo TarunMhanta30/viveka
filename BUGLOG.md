@@ -259,4 +259,12 @@
   them improves the model, meaning LR is fitting noise on them. A known cost
   of shipping the more interpretable model.
 
-  
+  - Unit test caught a real bug in _circular_mean_hour: for a principal whose
+  transactions average to midnight, atan2 returns a tiny negative angle,
+  %24 turns it into 23.999999, and it rounds to 24.0 -- not a valid hour.
+  That value feeds hour_deviation via circular distance, so the deviation
+  for such a principal was off by 23 hours and completely invisible in
+  summary statistics.
+  Fix: snap values at or above 23.9999 back to 0.
+  Lesson: the bug was in the one function I had already written a comment
+  warning about. Knowing a function is tricky is not the same as testing it.

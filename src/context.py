@@ -83,7 +83,13 @@ def _circular_mean_hour(hours: list[int]) -> float:
     y = sum(math.sin(a) for a in angles) / len(angles)
     mean_angle = math.atan2(y, x)
     hour = mean_angle * 24 / (2 * math.pi)
-    return hour % 24
+    hour = hour % 24
+    # Floating-point atan2 can return a tiny negative angle for a mean
+    # at midnight, which %24 turns into 23.999999 and rounds to 24.0 --
+    # not a valid hour. Snap it back to 0 (BUGLOG).
+    if hour >= 23.9999:
+        hour = 0.0
+    return hour
 
 
 def circular_hour_distance(h1: float, h2: float) -> float:
