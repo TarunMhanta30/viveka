@@ -268,3 +268,17 @@
   Fix: snap values at or above 23.9999 back to 0.
   Lesson: the bug was in the one function I had already written a comment
   warning about. Knowing a function is tricky is not the same as testing it.
+
+  - Red team (RT1-RT4) against OWASP Agentic Top 10 2026, frozen model.
+  RT1 adaptive evader: detection 70% -> 53% when the attacker halves the
+  attack; falls below 50% only at 40% magnitude. Graceful degradation --
+  evasion costs the attacker most of their take.
+  RT2 memory poisoning: 70% -> 51.7% at 400% baseline inflation.
+  RT3 mimicry: 70% -> 50%. The worst case. Contextual features are all
+  fakeable; velocity and utilisation are not, and they carry the residual.
+  RT4 threshold probing: boundary located in 8 queries. Withholding the
+  score raises cost from 1 query to 8, not to infinity. Rate limiting is
+  the correct mitigation and is NOT implemented.
+  Nothing remediated. Fixing after measurement invalidates the measurement.
+
+  

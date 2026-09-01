@@ -1,0 +1,88 @@
+{
+  "owasp_map": [
+    {
+      "id": "T1",
+      "name": "Memory & Context Poisoning",
+      "status": "PARTIAL",
+      "note": "Median-based baselines resist gradual pull; no drift-rate limiting. Attack RT2 measures the gap."
+    },
+    {
+      "id": "T2",
+      "name": "Tool Misuse",
+      "status": "OUT OF SCOPE",
+      "note": "VIVEKA scores payments, not tool invocations."
+    },
+    {
+      "id": "T3",
+      "name": "Privilege Compromise",
+      "status": "COVERED",
+      "note": "Route B delegation abuse. Mandate state features 1-8."
+    },
+    {
+      "id": "T4",
+      "name": "Resource Overload",
+      "status": "PARTIAL",
+      "note": "Velocity features detect bursts; no rate limiting of VIVEKA itself."
+    },
+    {
+      "id": "T5",
+      "name": "Cascading Hallucination",
+      "status": "OUT OF SCOPE",
+      "note": "No LLM in the scoring path (Section 8.5)."
+    },
+    {
+      "id": "T6",
+      "name": "Intent Breaking & Goal Manipulation",
+      "status": "COVERED",
+      "note": "The core thesis. Intent divergence is what VIVEKA measures. Routes A and B."
+    },
+    {
+      "id": "T7",
+      "name": "Misaligned & Deceptive Behaviors",
+      "status": "PARTIAL",
+      "note": "Detected only where it changes spend pattern."
+    },
+    {
+      "id": "T8",
+      "name": "Repudiation & Untraceability",
+      "status": "COVERED",
+      "note": "Hash-chained replayable audit trail (Section 13)."
+    },
+    {
+      "id": "T9",
+      "name": "Identity Spoofing",
+      "status": "OUT OF SCOPE",
+      "note": "UAP's job. VIVEKA assumes identity verified upstream (Section 4.6.2)."
+    },
+    {
+      "id": "T10",
+      "name": "Supply Chain",
+      "status": "OUT OF SCOPE",
+      "note": "7 pinned dependencies; not a detection concern."
+    }
+  ],
+  "rt1_adaptive_evader": {
+    "0.9": 0.6666666666666666,
+    "0.8": 0.6166666666666667,
+    "0.7": 0.6,
+    "0.6": 0.5833333333333334,
+    "0.5": 0.5333333333333333,
+    "0.4": 0.43333333333333335,
+    "0.3": 0.36666666666666664
+  },
+  "rt2_memory_poisoning": {
+    "1.5": 0.6166666666666667,
+    "2.0": 0.5833333333333334,
+    "3.0": 0.55,
+    "5.0": 0.5166666666666667
+  },
+  "rt3_mimicry": {
+    "before": 0.7,
+    "after": 0.5,
+    "degradation": 0.19999999999999996
+  },
+  "rt4_threshold_probing": {
+    "queries": 8,
+    "boundary": 100.0
+  }
+}
