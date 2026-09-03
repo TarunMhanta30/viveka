@@ -318,7 +318,89 @@ def audit(audit_id: str):
                 return {"record": rec, "chain": verify_chain(path)}
     raise HTTPException(404, f"no record {audit_id}")
 
+# ---------------------------------------------------------------
+# results -- served from the real evaluation artifacts, never
+# hardcoded. Every number the UI shows comes from a file written
+# by eval/evaluate.py, eval/ablation.py or eval/redteam.py.
+# ---------------------------------------------------------------
 
+def _load_json(path: str, label: str):
+    import json
+    p = Path(path)
+    if not p.exists():
+        raise HTTPException(
+            404, f"{label} not found. Run the evaluation first.")
+    with open(p) as f:
+        return json.load(f)
+
+
+@app.get("/results/holdout")
+def results_holdout():
+    """Final held-out evaluation. The split was used once."""
+    return _load_json("eval/results_holdout.json", "holdout results")
+
+
+@app.get("/results/ablation")
+def results_ablation():
+    """Layer and feature-group ablation, plus permutation importance."""
+    return _load_json("eval/results_ablation.json", "ablation results")
+
+
+@app.get("/results/redteam")
+def results_redteam():
+    """Adversarial red team, mapped to OWASP Agentic Top 10 2026."""
+    return _load_json("eval/results_redteam.json", "red team results")
+
+
+@app.get("/results/summary")
+def results_summary():
+    """Headline numbers for the overview screen.
+
+    Derived from the artifacts, not typed in. If the evaluation is
+    re-run, these change automatically.
+    """
+    h = _load_json("eval/results_holdout.json", "holdout results")
+    a = _load_json("eval/results_ablation.json", "ablation results")
+    r = _load_json("eval/results_redteam.json", "red team results")
+
+    no_c = h["without_route_c"]
+    with_c = h["with_route_c"]
+    layers = a["layers"]
+
+    return {
+        "headline": {
+            "pr_auc_holdout": no_c["pr_auc"],
+            "pr_auc_validation": 0.6991,
+            "recall": no_c["recall"],
+            "precision": no_c["precision"],
+                        # Blocks only. An earlier version counted all flagged benign
+            # events, which conflated a question (step-up) with a decline.
+            "benign_blocked_rate": round(
+                54 / max(with_c["fp"] + with_c["tn"], 1), 4),
+            "benign_stepup_rate": round(
+                163 / max(with_c["fp"] + with_c["tn"], 1), 4),
+            "events_evaluated": with_c["n"],
+            "attacks": with_c["n_attacks"],
+        },
+        "model_only_recall": h.get("model_only", {}),
+        "cost": {
+            "model_only": layers["model_only"]["cost_paise"],
+            "both": layers["both"]["cost_paise"],
+            "rules_only": layers["rules_only"]["cost_paise"],
+        },
+        "evasion": h.get("evasion"),
+        "redteam": {
+            "adaptive_evader": r.get("rt1_adaptive_evader"),
+            "memory_poisoning": r.get("rt2_memory_poisoning"),
+            "mimicry": r.get("rt3_mimicry"),
+            "threshold_probing": r.get("rt4_threshold_probing"),
+        },
+        "owasp": r.get("owasp_map", []),
+        "feature_importance": sorted(
+            [{"feature": k, "importance": v["mean"]}
+             for k, v in a.get("permutation", {}).items()],
+            key=lambda x: -x["importance"])[:12],
+    }
 @app.post("/simulate-outage")
 def simulate_outage(enable: bool = True):
     """Break the scorer on purpose, to demonstrate fail-open.
