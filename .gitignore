@@ -1,6 +1,8 @@
 .venv/
-data/
-models/
+data/events.csv
+data/labels.csv
+data/*.csv
+data/audit/
 .env
 __pycache__/
 *.pyc
