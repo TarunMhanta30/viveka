@@ -1,7 +1,4 @@
 .venv/
-data/events.csv
-data/labels.csv
-data/*.csv
 data/audit/
 .env
 __pycache__/
